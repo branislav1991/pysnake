@@ -5,6 +5,20 @@ import random
 import time
 
 
+class GameState:
+    def __init__(self, lives=3):
+        self.lives = lives
+        self.score = 0
+
+    def update(self):
+        sleep_time = max(0.1 - 0.002 * self.score, 0.05)
+        time.sleep(sleep_time)
+
+    def draw(self, screen):
+        screen.addstr(0, 0, f"Score: {self.score}", curses.color_pair(1))
+        screen.addstr(0, 10, f"Lives: {self.lives}", curses.color_pair(1))
+
+
 class MainScreen:
     def __init__(self, field_rows, field_cols, screen):
         self.screen = screen
@@ -28,13 +42,9 @@ class MainScreen:
         self.field.erase()
         self.score_board.erase()
 
-        #game_state.draw()
         snake.draw(self.field)
-
         game_field.draw(self.field)
-
-        self.score_board.addstr(0, 0, f"Score: {0}", curses.color_pair(1))
-        self.score_board.addstr(0, 10, f"Lives: {3}", curses.color_pair(1))
+        game_state.draw(self.score_board)
 
         self.field.refresh()
         self.border.refresh()
@@ -189,9 +199,7 @@ def main(screen):
         print(f'Screen not large enough to initialize game: required rows: {rows}, available rows: {max_rows}, required cols: {cols}, available cols: {max_cols}')
         quit()
 
-    score = 0
-    lives = 3
-
+    game_state = GameState()
     main_screen = MainScreen(rows, cols, screen)
 
     snake = Snake(rows, cols)
@@ -206,18 +214,18 @@ def main(screen):
 
         is_living, ate_flower = snake.update(game_field)
         if not is_living:
-            lives -= 1
+            game_state.lives -= 1
             main_screen.show_die_message()
             curses.napms(1000)
             break
         
         if ate_flower:
-            score += 1
+            game_state.score += 1
 
         game_field.update(snake)
 
-        main_screen.draw(snake, game_field, None)
-        time.sleep(0.1)
+        main_screen.draw(snake, game_field, game_state)
+        game_state.update() # update game state after main screen rendering to minimize lag due to refresh rate
 
 if __name__=='__main__':
     curses.wrapper(main)
