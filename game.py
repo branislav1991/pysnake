@@ -5,18 +5,67 @@ import random
 import time
 
 
-class GameState:
-    def __init__(self, lives=3):
+class Game:
+    def __init__(self, field_rows, field_cols, lives=3):
+        self.rows = field_rows
+        self.cols = field_cols
+
         self.lives = lives
         self.score = 0
+        self.state = 'playing'
+
+        self.new_game()
 
     def update(self):
-        sleep_time = max(0.1 - 0.002 * self.score, 0.05)
-        time.sleep(sleep_time)
+        """Update entire game state.
 
-    def draw(self, screen):
-        screen.addstr(0, 0, f"Score: {self.score}", curses.color_pair(1))
-        screen.addstr(0, 10, f"Lives: {self.lives}", curses.color_pair(1))
+        Returns:
+            False if game ended, otherwise True.
+        """
+        if self.state == 'died':
+            self.new_game()
+            self.state = 'playing'
+
+        else:
+            is_living, ate_flower = self.snake.update(self.field)
+            if not is_living:
+                if self.lives < 2:
+                    return False
+
+                self.lives -= 1
+                self.state = 'died'
+            
+            if ate_flower:
+                self.score += 1
+
+            self.field.update(self.snake)
+
+        return True
+
+    def draw(self, field_screen, score_screen):
+        score_screen.addstr(0, 0, f"Score: {self.score}", curses.color_pair(1))
+        score_screen.addstr(0, 10, f"Lives: {self.lives}", curses.color_pair(1))
+
+        self.snake.draw(field_screen)
+        self.field.draw(field_screen)
+
+    def key_callback(self, key):
+        self.snake.key_callback(key)
+
+    def sleep(self):
+        """Sleep until next game loop.
+        """
+        if self.state == 'playing':
+            sleep_time = max(0.1 - 0.002 * self.score, 0.05)
+            time.sleep(sleep_time)
+        elif self.state == 'died':
+            time.sleep(1) # display dead message for 1 second
+        else:
+            raise ValueError('Invalid game state')
+
+    def new_game(self):
+        self.snake = Snake(self.rows, self.cols)
+        self.field = Field(self.rows, self.cols, self.snake)
 
 
 class MainScreen:
@@ -31,20 +80,13 @@ class MainScreen:
         self.field = self.border.derwin(field_rows, field_cols, 1, 1)
         self.score_board = self.screen.derwin(2, field_cols+2, 0, 0)
 
-    def show_die_message(self):
-        self.field.addstr(0, 0, f"You died!", curses.color_pair(1))
-        self.field.refresh()
-        self.screen.refresh()
-
-    def draw(self, snake, game_field, game_state):
+    def draw(self, game):
         """Calls draw methods of all objects in game.
         """
         self.field.erase()
         self.score_board.erase()
 
-        snake.draw(self.field)
-        game_field.draw(self.field)
-        game_state.draw(self.score_board)
+        game.draw(self.field, self.score_board)
 
         self.field.refresh()
         self.border.refresh()
@@ -52,7 +94,7 @@ class MainScreen:
         self.screen.refresh()
 
 
-class GameField:
+class Field:
     def __init__(self, rows, cols, snake, num_flowers=2):
         self.rows = rows
         self.cols = cols
@@ -199,33 +241,22 @@ def main(screen):
         print(f'Screen not large enough to initialize game: required rows: {rows}, available rows: {max_rows}, required cols: {cols}, available cols: {max_cols}')
         quit()
 
-    game_state = GameState()
+    game = Game(rows, cols)
     main_screen = MainScreen(rows, cols, screen)
-
-    snake = Snake(rows, cols)
-    game_field = GameField(rows, cols, snake)
 
     while True:
         c = screen.getch()
         if c == curses.KEY_UP or c == curses.KEY_DOWN or c == curses.KEY_LEFT or c == curses.KEY_RIGHT:
-            snake.key_callback(c)
+            game.key_callback(c)
         elif c == ord('q'):
             break
 
-        is_living, ate_flower = snake.update(game_field)
-        if not is_living:
-            game_state.lives -= 1
-            main_screen.show_die_message()
-            curses.napms(1000)
+        if not game.update():
             break
-        
-        if ate_flower:
-            game_state.score += 1
 
-        game_field.update(snake)
+        main_screen.draw(game)
+        game.sleep()
 
-        main_screen.draw(snake, game_field, game_state)
-        game_state.update() # update game state after main screen rendering to minimize lag due to refresh rate
 
 if __name__=='__main__':
     curses.wrapper(main)
